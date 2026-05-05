@@ -1,24 +1,18 @@
-require("dotenv").config();
+
 const express = require("express");
-const axios = require("axios");
+const path = require("path");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-app.get("/api/image", async (req, res) => {
-  try {
-    const response = await axios.get(
-      `https://pixabay.com/api/?key=${process.env.PIXABAY_KEY}&q=business&image_type=photo`
-    );
+// servir archivos estáticos
+app.use(express.static(__dirname));
 
-    const image =
-      response.data.hits[
-        Math.floor(Math.random() * response.data.hits.length)
-      ];
-
-    res.json({ url: image.webformatURL });
-  } catch (err) {
-    res.json({ error: "error" });
-  }
+// ruta principal
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
-app.listen(3000);
+app.listen(PORT, () => {
+  console.log("Servidor activo en puerto " + PORT);
+});
