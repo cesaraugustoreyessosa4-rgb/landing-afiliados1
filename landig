@@ -1,0 +1,551 @@
+importar {Hono } desde 'hono';
+importar {cors } desde 'hono/cors';
+
+aplicación constante = nuevo Hono();
+
+app.use('*', cors());
+
+// Chequeo de salud
+app.get('/health', (c) => c.json({ estado: 'ok' }));
+
+// =========== API ENDPOINTS ===========
+
+// Productos
+app.get('/api/products', async (c) => {
+  încearcă {
+    productos constantes = esperar Bun.sql`SELECT * DE productos ORDENAR POR creado_at DESC`;
+    devuelve c.json(productos);
+  } captar (error) {
+    devuelve c.json({ error: 'No se pudieron recuperar los productos' }, 500);
+  }
+});
+
+app.post('/api/products', async (c) => {
+  încearcă {
+    cuerpo constante = esperar c.req.json();
+    const { nombre, descripción, precio, image_url, affilied_commission } = cuerpo;
+    
+    resultado constante = esperar Bun.sql`
+      INSERTAR EN productos (nombre, descripción, precio, imagen_url, comisión_afiliada)
+      VALORES (${nombre}, ${descripción}, ${precio}, ${image_url}, ${affiliate_commission})
+      DEVOLVIENDO *
+    `;
+    
+    devuelve c.json(resultado[0], 201);
+  } captar (error) {
+    devuelve c.json({ error: 'No se pudo crear el producto' }, 500);
+  }
+});
+
+// Afiliados
+app.post('/api/affiliates', async (c) => {
+  încearcă {
+    cuerpo constante = esperar c.req.json();
+    const {correo electrónico, nombre } = cuerpo;
+    
+    const affilied_code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    
+    resultado constante = esperar Bun.sql`
+      INSERTAR EN afiliados (correo electrónico, nombre, código_afiliado)
+      VALORES (${correo electrónico}, ${nombre}, ${código_afiliado})
+      DEVOLVIENDO *
+    `;
+    
+    devuelve c.json(resultado[0], 201);
+  } captar (error) {
+    devuelve c.json({ error: 'No se pudo crear el afiliado' }, 500);
+  }
+});
+
+app.get('/api/affiliates/:code', async (c) => {
+  încearcă {
+    código constante = c.req.param('código');
+    const afiliado = await Bun.sql`SELECT * FROM afiliados DONDE afiliate_code = ${code}`;
+    
+    dacă (!affilied.length) {
+      devuelve c.json({ error: 'Afiliado no encontrado' }, 404);
+    }
+    
+    devuelve c.json(afiliado[0]);
+  } captar (error) {
+    devuelve c.json({ error: 'No se pudo recuperar el afiliado' }, 500);
+  }
+});
+
+// Gancho web PayPal
+app.post('/api/webhooks/paypal', async (c) => {
+  încearcă {
+    cuerpo constante = esperar c.req.json();
+    const { event_type, recurso } = cuerpo;
+    
+    if (event_type === 'CHECKOUT.ORDER.COMPLETED') {
+      const {id, pagador, unidades_compra } = recurso;
+      const afiliado_código = recurso.custom_id || nulo;
+      
+      await Bun.sql`
+        INSERTAR EN pedidos (id_orden, correo_cliente, monto, código_afiliado, método_pago, estado)
+        VALORES (${id}, ${payer.email_address}, ${purchase_units[0].amount.value}, ${affiliate_code}, 'paypal', 'completado')
+      `;
+      
+      if (affiliate_code) {
+        await Bun.sql`
+          ACTUALIZAR afiliados 
+          SET total_commissions = total_commissions + ${purchase_units[0].amount.value * 0.1}
+          DONDE código_afiliado = ${código_afiliado}
+        `;
+      }
+    }
+    
+    devuelve c.json({ recibido: verdadero });
+  } captar (error) {
+    devuelve c.json({ error: 'Error en el procesamiento del webhook' }, 500);
+  }
+});
+
+// Webhook de pago
+aplicación.post('/api/webhooks/payhip', asíncrono (c) => {
+  încearcă {
+    cuerpo constante = esperar c.req.json();
+    const { sale_id, client_email, monto, código_afiliado } = cuerpo;
+    
+    await Bun.sql`
+      INSERTAR EN pedidos (id_orden, correo_cliente, monto, código_afiliado, método_pago, estado)
+      VALORES (${sale_id}, ${customer_email}, ${amount}, ${affiliate_code}, 'pago', 'completado')
+    `;
+    
+    if (affiliate_code) {
+      await Bun.sql`
+        ACTUALIZAR afiliados 
+        SET total_commissions = total_commissions + ${monto * 0.1}
+        DONDE código_afiliado = ${código_afiliado}
+      `;
+    }
+    
+    devuelve c.json({ recibido: verdadero });
+  } captar (error) {
+    devuelve c.json({ error: 'Error en el procesamiento del webhook' }, 500);
+  }
+});
+
+// Estadísticas de afiliados
+app.get('/api/affiliates/:code/stats', async (c) => {
+  încearcă {
+    código constante = c.req.param('código');
+    
+    estadísticas constantes = espera Bun.sql`
+      SELECCIONAR 
+        un nombre,
+        a.affiliate_code,
+        COUNT(o.id) como total_sales,
+        COALESCE(SUM(o.amount), 0) como total_revenue,
+        a.comisiones_totales
+      DE afiliados a
+      ÚNASE A LA IZQUIERDA pedidos o EN a.affiliate_code = o.affiliate_code
+      DONDE a.affiliate_code = ${código}
+      GRUPO POR a.id, a.name, a.affiliate_code, a.total_commissions
+    `;
+    
+    devuelve c.json(stats[0] || {});
+  } captar (error) {
+    devuelve c.json({ error: 'No se pudieron recuperar las estadísticas' }, 500);
+  }
+});
+
+// =========== FRONTEND ==========
+
+// API para obtener imágenes de Unsplash
+app.get('/api/unsplash', async (c) => {
+  încearcă {
+    const query = c.req.query('q') || 'naturaleza';
+    const apiKey = Bun.env.UNSPLASH_API_KEY;
+    
+    dacă (!apiKey) {
+      devuelve c.json({url: 'https://via.placeholder.com/1920x1080?text=Fondo' });
+    }
+    
+    respuesta constante = esperar buscar(
+      `https://api.unsplash.com/search/photos?query=${query}&per_page=1&client_id=${apiKey}`
+    );
+    
+    datos constantes = esperar respuesta.json();
+    
+    if (data.results && data.results.length > 0) {
+      devolver c.json({
+        url: data.results[0].urls.regular,
+        fotógrafo: data.results[0].user.name,
+        enlace: data.results[0].links.html
+      });
+    }
+    
+    devuelve c.json({url: 'https://via.placeholder.com/1920x1080?text=Fondo' });
+  } captar (error) {
+    devuelve c.json({url: 'https://via.placeholder.com/1920x1080?text=Fondo' });
+  }
+});
+
+// Página principal
+app.get('/', (c) => {
+  devuelve c.html(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, escala-inicial=1.0">
+      <title>Aterrizaje - Productos Digitales</title>
+      <estilo>
+        * {
+          margin: 0;
+          acolchado: 0;
+          box-sizing: border-box;
+        }
+        
+        corpul {
+          familia de fuentes: 'Segoe UI', Tahoma, Ginebra, Verdana, sans-serif;
+          overflow-x: oculto;
+        }
+        
+        .landing {
+          min-height: 100vh;
+          background-size: cover;
+          background-position: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          posición: relativa;
+          transición: background-image 0,5s facilidad;
+        }
+        
+        .landing::before {
+          content: '';
+          posición: absoluta;
+          top: 0;
+          stânga: 0;
+          dreapta: 0;
+          jos: 0;
+          background: rgba(0, 0, 0, 0,4);
+          índice Z: 1;
+        }
+        
+        .container {
+          posición: relativa;
+          índice Z: 2;
+          text-align: center;
+          color: alb;
+          max-width: 800px;
+          padding: 20px;
+        }
+        
+        .product-image {
+          width: 200px;
+          altura: 200px;
+          margin: 0 auto 30px;
+          border-radius: 10px;
+          object-fit: cover;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0,3);
+        }
+        
+        h1 {
+          font-size: 3em;
+          margin-bottom: 20px;
+          text-shadow: 2px 2px 4px rgba(0, 0, 0, 0,5);
+        }
+        
+        .description {
+          font-size: 1,2em;
+          margin-bottom: 30px;
+          line-height: 1,6;
+          text-shadow: 1px 1px 2px rgba(0, 0, 0, 0,5);
+        }
+        
+        .price {
+          font-size: 2,5em;
+          margin-bottom: 30px;
+          font-weight: negrita;
+          color: #ffd700;
+        }
+        
+        .buttons {
+          display: flex;
+          gap: 20px;
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        
+        button {
+          acolchado: 15px 40px;
+          font-size: 1,1em;
+          border: none;
+          border-radius: 5px;
+          cursor: puntero;
+          transición: transformar 0,2s, box-shadow 0,2s;
+          font-weight: negrita;
+        }
+        
+        .btn-paypal {
+          background: #0070ba;
+          color: alb;
+        }
+        
+        .btn-paypal:hover {
+          transform: scale(1,05);
+          box-shadow: 0 5px 15px rgba(0, 112, 186, 0,4);
+        }
+        
+        .btn-payhip {
+          background: #ff6b6b;
+          color: alb;
+        }
+        
+        .btn-payhip:hover {
+          transform: scale(1,05);
+          box-shadow: 0 5px 15px rgba(255, 107, 107, 0,4);
+        }
+        
+        .affiliate-section {
+          margin-top: 40px;
+          padding: 20px;
+          background: rgba(255, 255, 255, 0,1);
+          border-radius: 10px;
+          fackdrop-filter: blur(10px);
+        }
+        
+        .affiliate-link {
+          background: rgba(255, 255, 255, 0,2);
+          acolchado: 10px 20px;
+          border-radius: 5px;
+          margin-top: 10px;
+          word-break: break-all;
+          font-size: 0,9em;
+        }
+        
+        .music-control {
+          posición: fija;
+          jos: 20px;
+          dreapta: 20px;
+          índice Z: 100;
+          background: rgba(0, 0, 0, 0,7);
+          border: none;
+          color: alb;
+          acolchado: 15px 20px;
+          border-radius: 50px;
+          cursor: puntero;
+          font-size: 1,2em;
+          transición: fondo 0,3s;
+        }
+        
+        .music-control:hover {
+          background: rgba(0, 0, 0, 0,9);
+        }
+        
+        audio {
+          display: none;
+        }
+      </style>
+    </head>
+    <cuerpo>
+      <div class="aterrizaje" id="aterrizaje">
+        <div class="contenedor">
+          <img id="productImage" class="product-image" src="https://via.placeholder.com/200" alt="Producto">
+          <h1 id="nombredelproducto">Producto Digital</h1>
+          <p class="descripción" id="descripción del producto">
+            Descripción del producto y el valor que proporciona
+          </p>
+          <p class="precio" id="precio del producto">$99,99</p>
+          
+          <div class="botones">
+            <button class="btn-paypal" onclick="buyWithPayPal()">Comprar con PayPal</button>
+            <button class="btn-payhip" onclick="buyWithPayhip()">Comprar con Payhip</button>
+          </div>
+          
+          <div class="afiliado-sección" id="affiliateSection" style="display: ninguno;">
+            <h3>¿Eres afiliado?</h3>
+            <p>Tu enlace único:</p>
+            <div class="enlace-afiliado" id="enlace-afiliado"></div>
+            <button onclick="copyAffiliateLink()" style="margin-top: 10px; fondo: #4CAF50; color: blanco; relleno: 10px 20px; borde: ninguno; radio de borde: 5px; cursor: puntero;">
+              Copiar enlace
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <audio id=bgMusic" loop>
+        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+      </audio>
+      
+      <button class="music-control" id="musicBtn" onclick="toggleMusic()">🔊 Música</button>
+      
+      <script>
+        const affiliedCode = new URLSearchParams(window.location.search).get('aff');
+        const bgMusic = document.getElementById('bgMusic');
+        const musicBtn = document.getElementById('musicBtn');
+        let isPlaying = false;
+        
+        // Cargar producto
+        función asíncrona loadProduct() {
+          încearcă {
+            respuesta constante = esperar buscar('/api/products');
+            productos constantes = esperar respuesta.json();
+            
+            if (products.length > 0) {
+              producto constante = productos[0];
+              document.getElementById('productName').textContent = product.name;
+              document.getElementById('descripción del producto').textContent = producto.descripción;
+              document.getElementById('productPrice').textContent = '$' + product.price;
+              document.getElementById('productImage').src = product.image_url;
+              
+              // Cargar fondo de Unsplash
+              loadBackground(product.name);
+            }
+          } captar (error) {
+            console.error('Error al cargar el producto:', error);
+          }
+        }
+        
+        // Cargar fondo dinámico
+        función asíncrona loadBackground(query) {
+          încearcă {
+            respuesta constante = esperar buscar(\`/api/unsplash?q=\${encodeURIComponent(query)}\`);
+            datos constantes = esperar respuesta.json();
+            
+            if (data.url) {
+              document.getElementById('landing').style.backgroundImage = \`url('\${data.url}')\`;
+            }
+          } captar (error) {
+            console.error('Fondo de carga de error:', error);
+          }
+        }
+        
+        // Música
+        function toggleMusic() {
+          if (isPlaying) {
+            bgMusic.pause();
+            musicbtn.textContent = '🔇 Música';
+            isPlaying = false;
+          } else {
+            bgMusic.play();
+            musicbtn.textContent = '🔊 Música';
+            isPlaying = verdadero;
+          }
+        }
+        
+        // Pausa música al salir
+        window.addEventListener('antes de descargar', () => {
+          bgMusic.pause();
+        });
+        
+        // Mostrar sección de afiliado
+        if (affiliateCode) {
+          document.getElementById('affiliedSection').style.display = 'bloque';
+          document.getElementById('affiliateLink').textContent = window.location.href;
+        }
+        
+        function copyAffiliateLink() {
+          const link = document.getElementById('affiliateLink').textContent;
+          navigator.clipboard.writeText(link).then(() => {
+            alert('Enlace copiado al portapapeles');
+          });
+        }
+        
+        function buyWithPayPal() {
+          const afiliadoParam = ¿código de afiliado? \`&custom_id=\${affiliateCode}\` : '';
+          window.location.href = \`/checkout/paypal?product=1\${affiliateParam}\`;
+        }
+        
+        function buyWithPayhip() {
+          const afiliadoParam = ¿código de afiliado? \`&affiliate_code=\${affiliateCode}\` : '';
+          window.location.href = \`/checkout/payhip?product=1\${affiliateParam}\`;
+        }
+        
+        // Cargar producto al iniciar
+        loadProduct();
+      </script>
+    </cuerpo>
+    </html>
+  `);
+});
+
+exportar aplicación predeterminada;
+Hacer clic „Commit schimbări"
+Luego crea paquete.json:
+Hacer clic "Agregar archivo" → „Creați fișier nou"
+Nombre: paquete.json
+Pega:
+{
+  "nombre": "afiliados del desembarco",
+  "versión": "1.0.0",
+  "descripción": "Página de destino con sistema de afiliados y pagos",
+  "principal": "index.ts",
+  "tipo": "módulo",
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "inicio": "bun run index.ts",
+    "construcción": "bun build index.ts"
+  },
+  "dependencias": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "tipos de bollos": "último"
+  }
+}
+Hacer clic „Commit schimbări"
+Luego crea init.sql:
+Hacer clic "Agregar archivo" → „Creați fișier nou"
+Nombre: init.sql
+Pega:
+CREAR TABLA SI NO EXISTEN productos (
+  ID SERIAL CLAVE PRIMARIA,
+  nombre VARCHAR(255) NO NULO,
+  descripción TEXTO NO NULO,
+  precio DECIMAL(10, 2) NO NULO,
+  image_url VARCHAR(500),
+  afilied_commission DECIMAL(5, 2) DEFAULT 10,
+  create_at TIMESTAMP PREDETERMINADO CURRENT_TIMESTAMP,
+  actualizado_at MARCA DE TIEMPO PREDETERMINADO MARCA DE TIEMPO_ACTUAL
+);
+
+CREAR TABLA SI NO EXISTEN afiliados (
+  ID SERIAL CLAVE PRIMARIA,
+  envíe un correo electrónico a VARCHAR(255) ÚNICO, NO NULO,
+  nombre VARCHAR(255) NO NULO,
+  código_afiliado VARCHAR(20) ÚNICO NO NULO,
+  total_commissions DECIMAL(10, 2) DEFAULT 0,
+  create_at TIMESTAMP PREDETERMINADO CURRENT_TIMESTAMP,
+  actualizado_at MARCA DE TIEMPO PREDETERMINADO MARCA DE TIEMPO_ACTUAL
+);
+
+CREAR TABLA SI NO EXISTE pedidos (
+  ID SERIAL CLAVE PRIMARIA,
+  order_id VARCHAR(255) ÚNICO NO NULO,
+  customer_email VARCHAR(255) NU NULL,
+  monto DECIMAL(10, 2) NO NULO,
+  código_afiliado VARCHAR(20),
+  pago_método VARCHAR(50) NO NULO,
+  estado VARCHAR(50) PREDETERMINADO 'pendiente',
+  create_at TIMESTAMP PREDETERMINADO CURRENT_TIMESTAMP,
+  actualizado_en MARCA DE TIEMPO PREDETERMINADO MARCA DE TIEMPO_ACTUAL,
+  CLAVE EXTRANJERA (código_afiliado) REFERENCIAS afiliados (código_afiliado)
+);
+
+CREAR TABLA SI NO EXISTEN webhooks (
+  ID SERIAL CLAVE PRIMARIA,
+  event_type VARCHAR(100) NU NULL,
+  carga útil JSONB NO NULL,
+  FALSO PREDETERMINADO BOOLEANO PROCESADO,
+  create_at TIMESTAMP PREDETERMINADO CURRENT_TIMESTAMP
+);
+
+CREAR ÍNDICE SI NO EXISTE idx_affiliate_code EN pedidos (affiliate_code);
+CREAR ÍNDICE SI NO EXISTE idx_order_id EN pedidos (order_id);
+CREAR ÍNDICE SI NO EXISTE idx_affiliate_email EN afiliados (correo electrónico);
+
+INSERTAR EN productos (nombre, descripción, precio, imagen_url, comisión_afiliada)
+VALORI (
+  „Mi Producto Digital",
+  'Este es un producto digital increíble que te ayudara a alcanzar tus objetivos. Incluye acceso completo a todos los recursos y así prioritario.',
+  99,99,
+  'https://via.placeholder.com/200',
+  10
+)
+SOBRE EL CONFLICTO NO HAGAS NADA;
+Hacer clic „Commit schimbări"
